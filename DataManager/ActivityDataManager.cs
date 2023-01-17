@@ -23,8 +23,12 @@ namespace WorkingShiftActivity.DataManager
             return _workingShiftDbContext.Activities.FirstOrDefault(act => act.Id == id);
         }
 
-        public IEnumerable<Activity> GetAll(string employeeId)
+        public IList<Activity> GetAll(string? employeeId)
         {
+            if (string.IsNullOrEmpty(employeeId))
+            {
+                return _workingShiftDbContext.Activities.ToList();
+            }
             return _workingShiftDbContext.Activities.Where(act => act.EmployeeId == employeeId).ToList();
         }
 

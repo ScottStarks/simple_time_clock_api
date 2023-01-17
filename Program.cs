@@ -8,6 +8,7 @@ using System.Text;
 using WorkingShiftActivity.Context;
 using WorkingShiftActivity.Context.Models;
 using WorkingShiftActivity.DataManager;
+using WorkingShiftActivity.Helper;
 using WorkingShiftActivity.Repository;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,6 +37,9 @@ builder.Services.AddAuthentication(x =>
 builder.Services.AddDbContext<WorkingShiftContext>(wsc => wsc.UseSqlServer(connectionString));
 builder.Services.AddScoped<IActivityDataRepository<Activity, ActivityDto>, ActivityDataManager>();
 builder.Services.AddScoped<IAuthDataRepository<Employee, EmployeeDto>, AuthDataManager>();
+
+builder.Services.AddAutoMapper(typeof(MappingProfile));
+
 builder.Services.AddControllers();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

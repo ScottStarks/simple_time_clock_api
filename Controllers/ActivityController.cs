@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using WorkingShiftActivity.Context.Models;
@@ -15,9 +16,28 @@ namespace WorkingShiftActivity.Controllers
     public class ActivityController : ControllerBase
     {
         private readonly IActivityDataRepository<Activity, ActivityDto> _dataRepository;
-        public ActivityController(IActivityDataRepository<Activity, ActivityDto> dataRepository)
+        private readonly IMapper _mapper;
+        public ActivityController(IActivityDataRepository<Activity, 
+            ActivityDto> dataRepository,
+            IMapper mapper)
         {
             _dataRepository = dataRepository;
+            _mapper = mapper;
+        }
+
+        [Route("GetShiftData")]
+        [HttpGet]
+        public IActionResult Activity([FromQuery] string employeeId)
+        {
+            try
+            {
+                var data = _dataRepository.GetAll(employeeId);
+                return StatusCode((int)HttpStatusCode.OK, new Response<List<ActivityResponse>> { Message = "Success!", Data = _mapper.Map<List<ActivityResponse>>(data) });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode((int)HttpStatusCode.InternalServerError, ex.InnerException?.Message);
+            }
         }
 
         [Route("startshift")]
