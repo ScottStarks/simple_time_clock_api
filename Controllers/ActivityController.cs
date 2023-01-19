@@ -17,7 +17,7 @@ namespace WorkingShiftActivity.Controllers
     {
         private readonly IActivityDataRepository<Activity, ActivityDto> _dataRepository;
         private readonly IMapper _mapper;
-        public ActivityController(IActivityDataRepository<Activity, 
+        public ActivityController(IActivityDataRepository<Activity,
             ActivityDto> dataRepository,
             IMapper mapper)
         {
@@ -25,7 +25,7 @@ namespace WorkingShiftActivity.Controllers
             _mapper = mapper;
         }
 
-        [Route("GetShiftData")]
+        [Route("getshiftdata")]
         [HttpGet]
         public IActionResult Activity([FromQuery] string employeeId)
         {
@@ -71,7 +71,7 @@ namespace WorkingShiftActivity.Controllers
                     _dataRepository.Add(activity);
                     return StatusCode((int)HttpStatusCode.Created, new Response<ActivityResponse>
                     {
-                        Message = "Activity created successfully",
+                        Message = "Shift started successfully",
                         Data = new ActivityResponse
                         {
                             Id = activity.Id,
@@ -87,7 +87,7 @@ namespace WorkingShiftActivity.Controllers
                         }
                     });
                 };
-                return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse> { Message = "Can't create new shift as another active!" });
+                return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse> { Message = "Can't start new shift as another one is active!" });
             }
             catch (Exception ex)
             {
@@ -135,7 +135,20 @@ namespace WorkingShiftActivity.Controllers
                     _dataRepository.Update(entity);
                     return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
                     {
-                        Message = "Shift ended successfully!"
+                        Message = "Shift ended successfully!",
+                        Data = new ActivityResponse
+                        {
+                            Id = entity.Id,
+                            WorkShiftStartTime = entity.WorkShiftStartTime,
+                            WorkShiftEndTime = entity.WorkShiftEndTime,
+                            BreakStartTime = entity.BreakStartTime,
+                            BreakEndTime = entity.BreakEndTime,
+                            LunchStartTime = entity.LunchStartTime,
+                            LunchEndTime = entity.LunchEndTime,
+                            IsBreakActive = entity.IsBreakActive,
+                            IsLunchActive = entity.IsLunchActive,
+                            IsShiftActive = entity.IsShiftActive
+                        }
                     });
 
                 }
@@ -173,7 +186,7 @@ namespace WorkingShiftActivity.Controllers
                         {
                             return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
                             {
-                                Message = "Can't start break time as already active or ended!"
+                                Message = "Can't start break time as another is already active or ended!"
                             });
                         }
                         entity.BreakStartTime = DateTime.Now;
@@ -302,7 +315,7 @@ namespace WorkingShiftActivity.Controllers
                         {
                             return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
                             {
-                                Message = "Can't start lunch time as already active or ended!"
+                                Message = "Can't start lunch time as another one already active or ended!"
                             });
                         }
                         entity.LunchStartTime = DateTime.Now;
