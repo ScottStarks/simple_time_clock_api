@@ -35,7 +35,7 @@ namespace WorkingShiftActivity.DataManager
               {
              new Claim(ClaimTypes.Name, employee.Name)
               }),
-                Expires = DateTime.UtcNow.AddMinutes(10),
+                Expires = DateTime.UtcNow.AddMinutes(60),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(tokenKey), SecurityAlgorithms.HmacSha256Signature)
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
