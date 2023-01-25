@@ -39,4 +39,6 @@ public partial class Activity
     public bool IsBreakActive { get; set; }
 
     public bool IsLunchActive { get; set; }
+
+    public virtual Employee Employee { get; set; } 
 }

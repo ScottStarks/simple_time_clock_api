@@ -10,6 +10,8 @@ namespace WorkingShiftActivity.Helper
         {
             CreateMap<Activity, ActivityResponse>()
                 .ReverseMap();
+            CreateMap<Employee, EmployeeResponse>()
+                .ReverseMap();
         }
     }
 }

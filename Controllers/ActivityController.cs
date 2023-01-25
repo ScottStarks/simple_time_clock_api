@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using WorkingShiftActivity.Context.Models;
 using WorkingShiftActivity.DataManager;
+using WorkingShiftActivity.Enums;
 using WorkingShiftActivity.Models.RequestModels;
 using WorkingShiftActivity.Models.ResponseModels;
 using WorkingShiftActivity.Repository;
@@ -16,18 +17,21 @@ namespace WorkingShiftActivity.Controllers
     public class ActivityController : ControllerBase
     {
         private readonly IActivityDataRepository<Activity, ActivityDto> _dataRepository;
+        private readonly IAuthDataRepository<Employee, EmployeeDto> _authRepository;
         private readonly IMapper _mapper;
         public ActivityController(IActivityDataRepository<Activity,
             ActivityDto> dataRepository,
-            IMapper mapper)
+            IMapper mapper,
+            IAuthDataRepository<Employee, EmployeeDto> authRepository)
         {
             _dataRepository = dataRepository;
             _mapper = mapper;
+            _authRepository = authRepository;
         }
 
         [Route("getshiftdata")]
         [HttpGet]
-        public IActionResult Activity([FromQuery] string employeeId)
+        public IActionResult Activity([FromQuery] string? employeeId)
         {
             try
             {
@@ -50,43 +54,20 @@ namespace WorkingShiftActivity.Controllers
             }
             try
             {
-                var employeeActivities = _dataRepository.GetAll(employeeId).ToList();
-                bool isAnotherShiftActive = employeeActivities.Find(x => x.IsShiftActive) != null;
-                if (!isAnotherShiftActive)
+                var employeeInfo = _authRepository.Get(employeeId);
+                if (employeeInfo.Role == (int)RoleEnum.Admin)
                 {
-                    Activity activity = new Activity
+                    return CreateShift(employeeId);
+                }
+                else
+                {
+                    var employeeActivities = _dataRepository.GetAll(employeeId).ToList();
+                    bool isAnotherShiftActive = employeeActivities.Find(x => x.IsShiftActive) != null;
+                    if (!isAnotherShiftActive)
                     {
-                        EmployeeId = employeeId,
-                        WorkShiftStartTime = DateTime.Now,
-                        WorkShiftEndTime = null,
-                        BreakStartTime = null,
-                        BreakEndTime = null,
-                        LunchStartTime = null,
-                        LunchEndTime = null,
-                        IsBreakActive = false,
-                        IsLunchActive = false,
-                        IsShiftActive = true
-
+                        return CreateShift(employeeId);
                     };
-                    _dataRepository.Add(activity);
-                    return StatusCode((int)HttpStatusCode.Created, new Response<ActivityResponse>
-                    {
-                        Message = "Shift started successfully",
-                        Data = new ActivityResponse
-                        {
-                            Id = activity.Id,
-                            WorkShiftStartTime = activity.WorkShiftStartTime,
-                            WorkShiftEndTime = activity.WorkShiftEndTime,
-                            BreakStartTime = activity.BreakStartTime,
-                            BreakEndTime = activity.BreakEndTime,
-                            LunchStartTime = activity.LunchStartTime,
-                            LunchEndTime = activity.LunchEndTime,
-                            IsBreakActive = activity.IsBreakActive,
-                            IsLunchActive = activity.IsLunchActive,
-                            IsShiftActive = activity.IsShiftActive
-                        }
-                    });
-                };
+                }
                 return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse> { Message = "Can't start new shift as another one is active!" });
             }
             catch (Exception ex)
@@ -113,43 +94,31 @@ namespace WorkingShiftActivity.Controllers
 
                 if (entity != null)
                 {
-                    if (entity.IsBreakActive)
+                    var employeeInfo = _authRepository.Get(entity.EmployeeId);
+                    if (employeeInfo.Role == (int)RoleEnum.Admin)
                     {
-                        return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
-                        {
-                            Message = "Can't end shift in active break!"
-                        });
+                        return EndShift(entity);
                     }
-
-                    if (entity.IsLunchActive)
+                    else
                     {
-                        return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                        if (entity.IsBreakActive)
                         {
-                            Message = "Can't end shift in active lunch!"
-                        });
-                    }
-
-                    entity.WorkShiftEndTime = DateTime.Now;
-                    entity.IsShiftActive = false;
-
-                    _dataRepository.Update(entity);
-                    return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
-                    {
-                        Message = "Shift ended successfully!",
-                        Data = new ActivityResponse
-                        {
-                            Id = entity.Id,
-                            WorkShiftStartTime = entity.WorkShiftStartTime,
-                            WorkShiftEndTime = entity.WorkShiftEndTime,
-                            BreakStartTime = entity.BreakStartTime,
-                            BreakEndTime = entity.BreakEndTime,
-                            LunchStartTime = entity.LunchStartTime,
-                            LunchEndTime = entity.LunchEndTime,
-                            IsBreakActive = entity.IsBreakActive,
-                            IsLunchActive = entity.IsLunchActive,
-                            IsShiftActive = entity.IsShiftActive
+                            return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                            {
+                                Message = "Can't end shift in active break!"
+                            });
                         }
-                    });
+
+                        if (entity.IsLunchActive)
+                        {
+                            return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                            {
+                                Message = "Can't end shift in active lunch!"
+                            });
+                        }
+
+                        return EndShift(entity);
+                    }
 
                 }
                 return StatusCode((int)HttpStatusCode.NotFound, new Response<ActivityResponse> { Message = "Shift not found!" });
@@ -178,45 +147,32 @@ namespace WorkingShiftActivity.Controllers
 
                 if (entity != null)
                 {
-                    if (entity.IsShiftActive)
+                    var employeeInfo = _authRepository.Get(entity.EmployeeId);
+                    if (employeeInfo.Role == (int)RoleEnum.Admin)
                     {
-                        var isBreakAlreadyEnded = entity.BreakEndTime != null;
-                        var isLunchTimeAlreadyEnded = entity.LunchEndTime != null;
-                        if (entity.IsBreakActive || isBreakAlreadyEnded)
-                        {
-                            return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
-                            {
-                                Message = "Can't start break time as another is already active or ended!"
-                            });
-                        }
-                        entity.BreakStartTime = DateTime.Now;
-                        entity.IsBreakActive = true;
-
-                        _dataRepository.Update(entity);
-                        return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
-                        {
-                            Message = "Break time start!",
-                            Data = new ActivityResponse
-                            {
-                                Id = entity.Id,
-                                WorkShiftStartTime = entity.WorkShiftStartTime,
-                                WorkShiftEndTime = entity.WorkShiftEndTime,
-                                BreakStartTime = entity.BreakStartTime,
-                                BreakEndTime = entity.BreakEndTime,
-                                LunchStartTime = entity.LunchStartTime,
-                                LunchEndTime = entity.LunchEndTime,
-                                IsBreakActive = entity.IsBreakActive,
-                                IsLunchActive = entity.IsLunchActive,
-                                IsShiftActive = entity.IsShiftActive
-                            }
-                        });
-
+                        return StartBreak(entity);
                     }
-
-                    return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                    else
                     {
-                        Message = "Can't start break time in an inactive shift!"
-                    });
+                        if (entity.IsShiftActive)
+                        {
+                            var isBreakAlreadyEnded = entity.BreakEndTime != null;
+                            var isLunchTimeAlreadyEnded = entity.LunchEndTime != null;
+                            if (entity.IsBreakActive || isBreakAlreadyEnded)
+                            {
+                                return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                                {
+                                    Message = "Can't start break time as another is already active or ended!"
+                                });
+                            }
+                            return StartBreak(entity);
+                        }
+
+                        return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                        {
+                            Message = "Can't start break time in an inactive shift!"
+                        });
+                    }
                 }
                 return StatusCode((int)HttpStatusCode.NotFound, new Response<ActivityResponse> { Message = "Shift not found!" });
             }
@@ -244,43 +200,30 @@ namespace WorkingShiftActivity.Controllers
 
                 if (entity != null)
                 {
-                    if (entity.IsShiftActive)
+                    var employeeInfo = _authRepository.Get(entity.EmployeeId);
+                    if (employeeInfo.Role == (int)RoleEnum.Admin)
                     {
-                        if (entity.IsBreakActive)
+                        return EndBreak(entity);
+                    }
+                    else
+                    {
+                        if (entity.IsShiftActive)
                         {
-                            entity.BreakEndTime = DateTime.Now;
-                            entity.IsBreakActive = false;
-
-                            _dataRepository.Update(entity);
-                            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+                            if (entity.IsBreakActive)
                             {
-                                Message = "Break time end!",
-                                Data = new ActivityResponse
-                                {
-                                    Id = entity.Id,
-                                    WorkShiftStartTime = entity.WorkShiftStartTime,
-                                    WorkShiftEndTime = entity.WorkShiftEndTime,
-                                    BreakStartTime = entity.BreakStartTime,
-                                    BreakEndTime = entity.BreakEndTime,
-                                    LunchStartTime = entity.LunchStartTime,
-                                    LunchEndTime = entity.LunchEndTime,
-                                    IsBreakActive = entity.IsBreakActive,
-                                    IsLunchActive = entity.IsLunchActive,
-                                    IsShiftActive = entity.IsShiftActive
-                                }
+                                return EndBreak(entity);
+                            }
+                            return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                            {
+                                Message = "There is no active break!"
                             });
-
                         }
+
                         return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
                         {
-                            Message = "There is no active break!"
+                            Message = "Can't end break time in an inactive shift!"
                         });
                     }
-
-                    return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
-                    {
-                        Message = "Can't end break time in an inactive shift!"
-                    });
                 }
                 return StatusCode((int)HttpStatusCode.NotFound, new Response<ActivityResponse> { Message = "Shift not found!" });
             }
@@ -308,44 +251,31 @@ namespace WorkingShiftActivity.Controllers
 
                 if (entity != null)
                 {
-                    if (entity.IsShiftActive)
+                    var employeeInfo = _authRepository.Get(entity.EmployeeId);
+                    if (employeeInfo.Role == (int)RoleEnum.Admin)
                     {
-                        var isLunchTimeAlreadyEnded = entity.LunchEndTime != null;
-                        if (entity.IsLunchActive || isLunchTimeAlreadyEnded)
-                        {
-                            return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
-                            {
-                                Message = "Can't start lunch time as another one already active or ended!"
-                            });
-                        }
-                        entity.LunchStartTime = DateTime.Now;
-                        entity.IsLunchActive = true;
-
-                        _dataRepository.Update(entity);
-                        return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
-                        {
-                            Message = "Lunch time start!",
-                            Data = new ActivityResponse
-                            {
-                                Id = entity.Id,
-                                WorkShiftStartTime = entity.WorkShiftStartTime,
-                                WorkShiftEndTime = entity.WorkShiftEndTime,
-                                BreakStartTime = entity.BreakStartTime,
-                                BreakEndTime = entity.BreakEndTime,
-                                LunchStartTime = entity.LunchStartTime,
-                                LunchEndTime = entity.LunchEndTime,
-                                IsBreakActive = entity.IsBreakActive,
-                                IsLunchActive = entity.IsLunchActive,
-                                IsShiftActive = entity.IsShiftActive
-                            }
-                        });
-
+                        return StartLunch(entity);
                     }
-
-                    return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                    else
                     {
-                        Message = "Can't start lunch time in an inactive shift!"
-                    });
+                        if (entity.IsShiftActive)
+                        {
+                            var isLunchTimeAlreadyEnded = entity.LunchEndTime != null;
+                            if (entity.IsLunchActive || isLunchTimeAlreadyEnded)
+                            {
+                                return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                                {
+                                    Message = "Can't start lunch time as another one already active or ended!"
+                                });
+                            }
+                            return StartLunch(entity);
+                        }
+
+                        return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                        {
+                            Message = "Can't start lunch time in an inactive shift!"
+                        });
+                    }
                 }
                 return StatusCode((int)HttpStatusCode.NotFound, new Response<ActivityResponse> { Message = "Shift not found!" });
             }
@@ -373,37 +303,24 @@ namespace WorkingShiftActivity.Controllers
 
                 if (entity != null)
                 {
-                    if (entity.IsShiftActive)
+                    var employeeInfo = _authRepository.Get(entity.EmployeeId);
+                    if (employeeInfo.Role == (int)RoleEnum.Admin)
                     {
-                        if (entity.IsLunchActive)
+                        return EndLunch(entity);
+                    }
+                    else
+                    {
+                        if (entity.IsShiftActive)
                         {
-                            entity.LunchEndTime = DateTime.Now;
-                            entity.IsLunchActive = false;
-
-                            _dataRepository.Update(entity);
-                            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+                            if (entity.IsLunchActive)
                             {
-                                Message = "Lunch time end!",
-                                Data = new ActivityResponse
-                                {
-                                    Id = entity.Id,
-                                    WorkShiftStartTime = entity.WorkShiftStartTime,
-                                    WorkShiftEndTime = entity.WorkShiftEndTime,
-                                    BreakStartTime = entity.BreakStartTime,
-                                    BreakEndTime = entity.BreakEndTime,
-                                    LunchStartTime = entity.LunchStartTime,
-                                    LunchEndTime = entity.LunchEndTime,
-                                    IsBreakActive = entity.IsBreakActive,
-                                    IsLunchActive = entity.IsLunchActive,
-                                    IsShiftActive = entity.IsShiftActive
-                                }
+                                return EndLunch(entity);
+                            }
+                            return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
+                            {
+                                Message = "there is no active lunch!"
                             });
-
                         }
-                        return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
-                        {
-                            Message = "there is no active lunch!"
-                        });
                     }
 
                     return StatusCode((int)HttpStatusCode.Conflict, new Response<ActivityResponse>
@@ -419,5 +336,168 @@ namespace WorkingShiftActivity.Controllers
             }
         }
 
+        #region methods
+        private ObjectResult CreateShift(string employeeId)
+        {
+            Activity activity = new Activity
+            {
+                EmployeeId = employeeId,
+                WorkShiftStartTime = DateTime.Now,
+                WorkShiftEndTime = null,
+                BreakStartTime = null,
+                BreakEndTime = null,
+                LunchStartTime = null,
+                LunchEndTime = null,
+                IsBreakActive = false,
+                IsLunchActive = false,
+                IsShiftActive = true
+
+            };
+            _dataRepository.Add(activity);
+            return StatusCode((int)HttpStatusCode.Created, new Response<ActivityResponse>
+            {
+                Message = "Shift started successfully",
+                Data = new ActivityResponse
+                {
+                    Id = activity.Id,
+                    WorkShiftStartTime = activity.WorkShiftStartTime,
+                    WorkShiftEndTime = activity.WorkShiftEndTime,
+                    BreakStartTime = activity.BreakStartTime,
+                    BreakEndTime = activity.BreakEndTime,
+                    LunchStartTime = activity.LunchStartTime,
+                    LunchEndTime = activity.LunchEndTime,
+                    IsBreakActive = activity.IsBreakActive,
+                    IsLunchActive = activity.IsLunchActive,
+                    IsShiftActive = activity.IsShiftActive
+                }
+            });
+        }
+
+        private ObjectResult EndShift(Activity entity)
+        {
+            entity.WorkShiftEndTime = DateTime.Now;
+            entity.IsShiftActive = false;
+
+            _dataRepository.Update(entity);
+            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+            {
+                Message = "Shift ended successfully!",
+                Data = new ActivityResponse
+                {
+                    Id = entity.Id,
+                    WorkShiftStartTime = entity.WorkShiftStartTime,
+                    WorkShiftEndTime = entity.WorkShiftEndTime,
+                    BreakStartTime = entity.BreakStartTime,
+                    BreakEndTime = entity.BreakEndTime,
+                    LunchStartTime = entity.LunchStartTime,
+                    LunchEndTime = entity.LunchEndTime,
+                    IsBreakActive = entity.IsBreakActive,
+                    IsLunchActive = entity.IsLunchActive,
+                    IsShiftActive = entity.IsShiftActive
+                }
+            });
+        }
+
+        private ObjectResult StartBreak(Activity entity)
+        {
+            entity.BreakStartTime = DateTime.Now;
+            entity.IsBreakActive = true;
+
+            _dataRepository.Update(entity);
+            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+            {
+                Message = "Break time start!",
+                Data = new ActivityResponse
+                {
+                    Id = entity.Id,
+                    WorkShiftStartTime = entity.WorkShiftStartTime,
+                    WorkShiftEndTime = entity.WorkShiftEndTime,
+                    BreakStartTime = entity.BreakStartTime,
+                    BreakEndTime = entity.BreakEndTime,
+                    LunchStartTime = entity.LunchStartTime,
+                    LunchEndTime = entity.LunchEndTime,
+                    IsBreakActive = entity.IsBreakActive,
+                    IsLunchActive = entity.IsLunchActive,
+                    IsShiftActive = entity.IsShiftActive
+                }
+            });
+        }
+
+        private ObjectResult EndBreak(Activity entity)
+        {
+            entity.BreakStartTime = DateTime.Now;
+            entity.IsBreakActive = true;
+
+            _dataRepository.Update(entity);
+            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+            {
+                Message = "Break time start!",
+                Data = new ActivityResponse
+                {
+                    Id = entity.Id,
+                    WorkShiftStartTime = entity.WorkShiftStartTime,
+                    WorkShiftEndTime = entity.WorkShiftEndTime,
+                    BreakStartTime = entity.BreakStartTime,
+                    BreakEndTime = entity.BreakEndTime,
+                    LunchStartTime = entity.LunchStartTime,
+                    LunchEndTime = entity.LunchEndTime,
+                    IsBreakActive = entity.IsBreakActive,
+                    IsLunchActive = entity.IsLunchActive,
+                    IsShiftActive = entity.IsShiftActive
+                }
+            });
+        }
+
+        private ObjectResult StartLunch(Activity entity)
+        {
+            entity.LunchStartTime = DateTime.Now;
+            entity.IsLunchActive = true;
+
+            _dataRepository.Update(entity);
+            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+            {
+                Message = "Lunch time start!",
+                Data = new ActivityResponse
+                {
+                    Id = entity.Id,
+                    WorkShiftStartTime = entity.WorkShiftStartTime,
+                    WorkShiftEndTime = entity.WorkShiftEndTime,
+                    BreakStartTime = entity.BreakStartTime,
+                    BreakEndTime = entity.BreakEndTime,
+                    LunchStartTime = entity.LunchStartTime,
+                    LunchEndTime = entity.LunchEndTime,
+                    IsBreakActive = entity.IsBreakActive,
+                    IsLunchActive = entity.IsLunchActive,
+                    IsShiftActive = entity.IsShiftActive
+                }
+            });
+
+        }
+
+        private ObjectResult EndLunch(Activity entity)
+        {
+            entity.LunchEndTime = DateTime.Now;
+            entity.IsLunchActive = false;
+
+            _dataRepository.Update(entity);
+            return StatusCode((int)HttpStatusCode.OK, new Response<ActivityResponse>
+            {
+                Message = "Lunch time end!",
+                Data = new ActivityResponse
+                {
+                    Id = entity.Id,
+                    WorkShiftStartTime = entity.WorkShiftStartTime,
+                    WorkShiftEndTime = entity.WorkShiftEndTime,
+                    BreakStartTime = entity.BreakStartTime,
+                    BreakEndTime = entity.BreakEndTime,
+                    LunchStartTime = entity.LunchStartTime,
+                    LunchEndTime = entity.LunchEndTime,
+                    IsBreakActive = entity.IsBreakActive,
+                    IsLunchActive = entity.IsLunchActive,
+                    IsShiftActive = entity.IsShiftActive
+                }
+            });
+        }
+        #endregion
     }
 }

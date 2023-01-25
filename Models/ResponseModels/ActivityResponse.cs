@@ -24,5 +24,7 @@ namespace WorkingShiftActivity.Models.ResponseModels
         public bool IsBreakActive { get; set; }
 
         public bool IsLunchActive { get; set; }
+
+        public EmployeeResponse Employee { get; set; }
     }
 }

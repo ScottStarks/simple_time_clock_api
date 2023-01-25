@@ -62,19 +62,4 @@ namespace WorkingShiftActivity.DataManager
         public int Role { get; set; }
         public DateTime? CreatedOn { get; set; }
     }
-
-    public static class EmployeeDtoMapper
-    {
-        public static EmployeeDto MapToDto(Employee employee)
-        {
-            return new EmployeeDto()
-            {
-                Id = employee.Id,
-                Name = employee.Name,
-                Email = employee.Email,
-                Role = employee.Role,
-                CreatedOn = employee.CreatedOn
-            };
-        }
-    }
 }
